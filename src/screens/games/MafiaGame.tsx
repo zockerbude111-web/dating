@@ -94,8 +94,16 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   }, [phase, players]);
 
   // Execute mafia vote resolution when timer hits 0 or all votes are in
+  const resolvedRef = useRef(false);
   useEffect(() => {
-    if (phase === 'night_mafia_vote' && (mafiaVoteTimer === 0 || Object.keys(mafiaVotes).length === players.filter(p => p.role === 'Mafia' && p.isAlive).length)) {
+    if (phase === 'night_mafia_vote') {
+      resolvedRef.current = false;
+    }
+  }, [phase]);
+
+  useEffect(() => {
+    if (phase === 'night_mafia_vote' && !resolvedRef.current && (mafiaVoteTimer === 0 || Object.keys(mafiaVotes).length === players.filter(p => p.role === 'Mafia' && p.isAlive).length)) {
+      resolvedRef.current = true;
       resolveMafiaVoting();
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,11 +152,27 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         const t = window.setTimeout(() => {
           let voteId: string | null = null;
           
-          // Smart AI voting: if detective died and revealed mafia, prioritize voting for revealed mafia
-          if (revealedMafiaIds.length > 0 && Math.random() > 0.2) {
+          // Detective AI always votes for mafia if they know one (from detective log)
+          if (p.role === 'Detective' && detectiveLog.length > 0) {
+            const knownMafiaIds: string[] = [];
+            detectiveLog.forEach(log => {
+              if (log.isMafia) {
+                const mafiaPlayer = players.find(mp => mp.name === log.target && mp.isAlive);
+                if (mafiaPlayer) {
+                  knownMafiaIds.push(mafiaPlayer.id);
+                }
+              }
+            });
+            if (knownMafiaIds.length > 0) {
+              voteId = knownMafiaIds[Math.floor(Math.random() * knownMafiaIds.length)];
+            }
+          }
+          
+          // If no detective-based vote, check if detective died and revealed mafia
+          if (!voteId && revealedMafiaIds.length > 0 && Math.random() > 0.2) {
             // 80% chance to vote for revealed mafia
             voteId = revealedMafiaIds[Math.floor(Math.random() * revealedMafiaIds.length)];
-          } else {
+          } else if (!voteId) {
             // Normal random voting among alive players (not themselves)
             const potentialVotes = players.filter(v => v.isAlive && v.id !== p.id);
             if (potentialVotes.length > 0) {

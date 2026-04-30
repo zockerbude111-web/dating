@@ -124,14 +124,40 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       const livingAIs = players.filter(p => p.isAI && p.isAlive);
       const timeouts: number[] = [];
 
+      // Get revealed mafia from detective log if detective is dead
+      const revealedMafiaIds: string[] = [];
+      const detDead = players.find(p => p.role === 'Detective' && !p.isAlive);
+      if (detDead && detectiveLog.length > 0) {
+        detectiveLog.forEach(log => {
+          if (log.isMafia) {
+            const mafiaPlayer = players.find(p => p.name === log.target && p.isAlive);
+            if (mafiaPlayer) {
+              revealedMafiaIds.push(mafiaPlayer.id);
+            }
+          }
+        });
+      }
+
       livingAIs.forEach((p, index) => {
         // Stagger votes between 6-12 seconds
         const delay = 6000 + (index * (6000 / Math.max(livingAIs.length - 1, 1))) + Math.random() * 1000;
         const t = window.setTimeout(() => {
-          const potentialVotes = players.filter(v => v.isAlive && v.id !== p.id);
-          if (potentialVotes.length > 0) {
-            const voteId = potentialVotes[Math.floor(Math.random() * potentialVotes.length)].id;
-            setCurrentVotes(prev => ({ ...prev, [p.id]: voteId }));
+          let voteId: string | null = null;
+          
+          // Smart AI voting: if detective died and revealed mafia, prioritize voting for revealed mafia
+          if (revealedMafiaIds.length > 0 && Math.random() > 0.2) {
+            // 80% chance to vote for revealed mafia
+            voteId = revealedMafiaIds[Math.floor(Math.random() * revealedMafiaIds.length)];
+          } else {
+            // Normal random voting among alive players
+            const potentialVotes = players.filter(v => v.isAlive && v.id !== p.id);
+            if (potentialVotes.length > 0) {
+              voteId = potentialVotes[Math.floor(Math.random() * potentialVotes.length)].id;
+            }
+          }
+          
+          if (voteId) {
+            setCurrentVotes(prev => ({ ...prev, [p.id]: voteId! }));
           }
         }, delay);
         timeouts.push(t);
@@ -152,7 +178,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         timeouts.forEach(t => clearTimeout(t));
       };
     }
-  }, [phase, players]);
+  }, [phase, players, detectiveLog]);
 
   // Execute voting resolution when timer hits 0
   useEffect(() => {

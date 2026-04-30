@@ -66,12 +66,13 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       setVoteTimer(60);
       setCurrentVotes({});
 
-      // Set up AI players to vote at different intervals
+      // Set up AI players to vote at different intervals (6-12 seconds)
       const livingAIs = players.filter(p => p.isAI && p.isAlive);
       const timeouts: number[] = [];
 
-      livingAIs.forEach(p => {
-        const delay = Math.random() * 40000 + 4000; // Between 4 and 44 seconds
+      livingAIs.forEach((p, index) => {
+        // Stagger votes between 6-12 seconds
+        const delay = 6000 + (index * (6000 / Math.max(livingAIs.length - 1, 1))) + Math.random() * 1000;
         const t = window.setTimeout(() => {
           const potentialVotes = players.filter(v => v.isAlive && v.id !== p.id);
           if (potentialVotes.length > 0) {
@@ -203,12 +204,17 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
     
     if (phase === 'night_mafia') {
       if (!user || user.role !== 'Mafia' || !user.isAlive) {
-        // AI Mafia turn
+        // AI Mafia turn - vote first, then choose target
         const livingMafia = players.filter(p => p.role === 'Mafia' && p.isAlive);
         if (livingMafia.length > 0) {
           const targets = players.filter(p => p.role !== 'Mafia' && p.isAlive);
           if (targets.length > 0) {
-            setMafiaTarget(targets[Math.floor(Math.random() * targets.length)].id);
+            // Add a delay for mafia to "discuss/vote" before selecting target
+            const t1 = setTimeout(() => {
+              setMafiaTarget(targets[Math.floor(Math.random() * targets.length)].id);
+            }, 2000);
+            const t2 = setTimeout(() => setPhase('night_detective'), 4000);
+            return () => { clearTimeout(t1); clearTimeout(t2); };
           }
         }
         const t = setTimeout(() => setPhase('night_detective'), 1500);
@@ -457,7 +463,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {phase === 'day_reveal' && (
+        {phase === 'day_reveal' && user?.isAlive && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl p-3 text-center flex flex-col items-center justify-center gap-2">
             <div className="flex items-center justify-center gap-2 text-amber-500 text-xs font-bold">
               <Clock size={16} /> <span>Diskussion läuft: {discussTimer}s</span>
@@ -468,7 +474,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
           </div>
         )}
 
-        {phase === 'day_voting' && (
+        {phase === 'day_voting' && user?.isAlive && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl p-3 text-center flex flex-col items-center justify-center gap-2">
             <div className="flex items-center justify-center gap-2 text-red-500 text-xs font-bold">
               <Clock size={16} /> <span>Abstimmung läuft: {voteTimer}s</span>

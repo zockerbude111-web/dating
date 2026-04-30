@@ -17,7 +17,7 @@ interface ChatMsg {
   sender: string;
   text: string;
   time: string;
-  type: 'system' | 'user' | 'ai' | 'danger';
+  type: 'system' | 'user' | 'ai' | 'danger' | 'detective';
 }
 
 const DEATH_CARDS = ['Friedhofsspaziergang', 'Rattengift im Aperitif'];
@@ -47,7 +47,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   useEffect(() => { mafiaTargetRef.current = mafiaTarget; }, [mafiaTarget]);
   useEffect(() => { detectiveTargetRef.current = detectiveTarget; }, [detectiveTarget]);
 
-  const addLog = useCallback((text: string, type: 'system' | 'user' | 'ai' | 'danger' = 'system', sender: string = 'System') => {
+  const addLog = useCallback((text: string, type: 'system' | 'user' | 'ai' | 'danger' | 'detective' = 'system', sender: string = 'System') => {
     const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     setChatMsgs(prev => [...prev, { id: Math.random().toString(), sender, text, time, type }]);
   }, []);
@@ -210,10 +210,11 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
           const targets = players.filter(p => p.role !== 'Mafia' && p.isAlive);
           if (targets.length > 0) {
             // Add a delay for mafia to "discuss/vote" before selecting target
+            // If multiple mafias, they need to agree on a target
             const t1 = setTimeout(() => {
               setMafiaTarget(targets[Math.floor(Math.random() * targets.length)].id);
-            }, 2000);
-            const t2 = setTimeout(() => setPhase('night_detective'), 4000);
+            }, 2000 + (livingMafia.length > 1 ? 1000 : 0));
+            const t2 = setTimeout(() => setPhase('night_detective'), 4000 + (livingMafia.length > 1 ? 1500 : 0));
             return () => { clearTimeout(t1); clearTimeout(t2); };
           }
         }
@@ -266,7 +267,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         const isMafia = detTargetPlayer.role === 'Mafia';
         addLog(
           `🕵️‍♂️ Untersuchungsergebnis: ${detTargetPlayer.name} ist ${isMafia ? 'MAFIA 🔴' : 'KEIN Mafia ✅'}`,
-          'danger'
+          'detective'
         );
       }
     }
@@ -595,9 +596,11 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         <div ref={chatRef} className="flex-1 overflow-y-auto px-3 py-2 space-y-1.5">
           {chatMsgs.map(m => (
             <div key={m.id} className={`flex flex-col ${m.type === 'user' ? 'items-end' : 'items-start'}`}>
-              {m.type === 'system' || m.type === 'danger' ? (
+              {m.type === 'system' || m.type === 'danger' || m.type === 'detective' ? (
                 <div className={`text-[10px] px-2 py-1 rounded w-full text-center border border-stone-800/50 shadow-inner
-                  ${m.type === 'danger' ? 'bg-red-950/50 text-red-400 border-red-900/50 font-bold' : 'bg-stone-950/50 text-stone-400'}`}>
+                  ${m.type === 'danger' ? 'bg-red-950/50 text-red-400 border-red-900/50 font-bold' : 
+                    m.type === 'detective' ? 'bg-yellow-950/60 text-yellow-300 border-yellow-700/50 font-bold' : 
+                    'bg-stone-950/50 text-stone-400'}`}>
                   {m.text}
                 </div>
               ) : (

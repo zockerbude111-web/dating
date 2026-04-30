@@ -69,6 +69,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         
         const delay = 6000 + (index * 2000) + Math.random() * 4000;
         const t = window.setTimeout(() => {
+          // Mafia should never vote for other mafia members
           const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive && t.id !== p.id);
           if (potentialTargets.length > 0) {
             const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
@@ -286,18 +287,21 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
 
     // Calculate role distribution based on player count
     const numPlayers = players.length;
-    let numMafia = 2;
+    let numMafia = 1;
     let numDetective = 1;
     
     // Adjust mafia count based on total players for better balance
+    // 4 players: 1 Mafia, 1 Detective, 2 Civilians (25%)
+    // 6 players: 1 Mafia, 1 Detective, 4 Civilians (16.67%)
+    // 8 players: 2 Mafia, 1 Detective, 5 Civilians (25%)
     if (numPlayers <= 5) {
-      numMafia = 2;
+      numMafia = 1;
       numDetective = 1;
     } else if (numPlayers === 6 || numPlayers === 7) {
-      numMafia = 2;
+      numMafia = 1;
       numDetective = 1;
     } else if (numPlayers >= 8) {
-      numMafia = 3;
+      numMafia = 2;
       numDetective = 1;
     }
     

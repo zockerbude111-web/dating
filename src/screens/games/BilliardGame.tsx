@@ -2,11 +2,11 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 
 // Vertical table dimensions
-const W = 220;
-const H = 400;
-const CUSHION = 16;
-const POCKET_R = 12;
-const BALL_R = 7;
+const W = 300;
+const H = 540;
+const CUSHION = 20;
+const POCKET_R = 14;
+const BALL_R = 9;
 const FRICTION = 0.985;
 const MIN_SPEED = 0.15;
 

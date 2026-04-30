@@ -62,6 +62,9 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       const timeouts: number[] = [];
 
       livingMafia.forEach((p, index) => {
+        // Skip AI voting for the user (human player) - they will vote manually
+        if (!p.isAI) return;
+        
         const delay = 3000 + (index * 2000) + Math.random() * 2000;
         const t = window.setTimeout(() => {
           const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive);
@@ -635,8 +638,8 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
                   ${isTarget ? 'ring-2 ring-red-500' : ''}
                 `}
               >
-                {/* Mafia Vote Bubble (Night Voting) */}
-                {phase === 'night_mafia_vote' && player.isAlive && player.role !== 'Mafia' && mafiaVoteCount > 0 && (
+                {/* Mafia Vote Bubble (Night Voting) - Only visible to mafia members */}
+                {phase === 'night_mafia_vote' && player.isAlive && player.role !== 'Mafia' && mafiaVoteCount > 0 && user?.role === 'Mafia' && user.isAlive && (
                   <div className="absolute -top-1 -right-1 bg-red-800 border border-red-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white shadow animate-pulse">
                     {mafiaVoteCount}
                   </div>
@@ -659,11 +662,12 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
                 </span>
 
                 {isRevealed && (
-                  <span className={`text-[9px] font-mono px-1.5 py-0.5 mt-1 rounded border
+                  <span className={`text-[9px] font-mono px-1.5 py-0.5 mt-1 rounded border flex items-center gap-1
                     ${player.role === 'Mafia' ? 'bg-red-950/40 text-red-400 border-red-900/40' : ''}
-                    ${player.role === 'Detective' ? 'bg-blue-950/40 text-blue-400 border-blue-900/40' : ''}
+                    ${player.role === 'Detective' ? 'bg-yellow-950/60 text-yellow-300 border-yellow-700/50 font-bold' : ''}
                     ${player.role === 'Civilian' ? 'bg-stone-800 text-stone-400 border-stone-700/50' : ''}
                   `}>
+                    {player.role === 'Detective' && !player.isAlive && detectiveLog.length > 0 && '🕵️‍♂️'}
                     {player.role}
                   </span>
                 )}

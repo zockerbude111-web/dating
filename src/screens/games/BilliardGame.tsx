@@ -569,7 +569,6 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
           onMouseDown={handleDown}
           onMouseMove={handleMove}
           onMouseUp={handleUp}
-          onMouseLeave={handleUp}
           onTouchStart={handleDown}
           onTouchMove={handleMove}
           onTouchEnd={handleUp}

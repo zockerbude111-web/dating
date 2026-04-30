@@ -293,10 +293,10 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
     let numDetective = 1;
     
     // Adjust mafia count based on total players for better balance
-    // 6-8 players: 1 Mafia, 1 Detective, rest Civilians
-    // 9-11 players: 2 Mafia, 1 Detective, rest Civilians
+    // 6-7 players: 1 Mafia, 1 Detective, rest Civilians
+    // 8-11 players: 2 Mafia, 1 Detective, rest Civilians
     // 12 players: 3 Mafia, 1 Detective, rest Civilians
-    if (numPlayers <= 8) {
+    if (numPlayers <= 7) {
       numMafia = 1;
       numDetective = 1;
     } else if (numPlayers <= 11) {

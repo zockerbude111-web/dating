@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { ArrowLeft, UserPlus, Play, Skull, Eye, Vote, RefreshCw, Send, Clock } from 'lucide-react';
 
 type Role = 'Mafia' | 'Detective' | 'Civilian';
-type Phase = 'setup' | 'night_mafia' | 'night_detective' | 'night_action_execute' | 'day_reveal' | 'day_voting' | 'game_over';
+type Phase = 'setup' | 'night_mafia_vote' | 'night_mafia' | 'night_detective' | 'night_action_execute' | 'day_reveal' | 'day_voting' | 'game_over';
 
 interface Player {
   id: string;
@@ -32,6 +32,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   const [hasBegruessungskill, setHasBegruessungskill] = useState(true);
   const [isBegruessungskillActive, setIsBegruessungskillActive] = useState(false);
   const [mafiaTarget, setMafiaTarget] = useState<string>('');
+  const [mafiaVotes, setMafiaVotes] = useState<Record<string, string>>({});
   const [detectiveTarget, setDetectiveTarget] = useState<string>('');
   const [detectiveLog, setDetectiveLog] = useState<{ target: string; isMafia: boolean }[]>([]);
   const [winner, setWinner] = useState<string | null>(null);
@@ -46,6 +47,56 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
 
   useEffect(() => { mafiaTargetRef.current = mafiaTarget; }, [mafiaTarget]);
   useEffect(() => { detectiveTargetRef.current = detectiveTarget; }, [detectiveTarget]);
+
+  // Handle mafia voting countdown timer (30 seconds)
+  const [mafiaVoteTimer, setMafiaVoteTimer] = useState<number>(30);
+
+  // Handle mafia voting phase
+  useEffect(() => {
+    if (phase === 'night_mafia_vote') {
+      setMafiaVotes({});
+      setMafiaVoteTimer(30);
+
+      // Set up AI mafia members to vote at different intervals
+      const livingMafia = players.filter(p => p.role === 'Mafia' && p.isAlive);
+      const timeouts: number[] = [];
+
+      livingMafia.forEach((p, index) => {
+        const delay = 3000 + (index * 2000) + Math.random() * 2000;
+        const t = window.setTimeout(() => {
+          const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive);
+          if (potentialTargets.length > 0) {
+            const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
+            setMafiaVotes(prev => ({ ...prev, [p.id]: targetId }));
+          }
+        }, delay);
+        timeouts.push(t);
+      });
+
+      const timer = setInterval(() => {
+        setMafiaVoteTimer(prev => {
+          if (prev <= 1) {
+            clearInterval(timer);
+            return 0;
+          }
+          return prev - 1;
+        });
+      }, 1000);
+
+      return () => {
+        clearInterval(timer);
+        timeouts.forEach(t => clearTimeout(t));
+      };
+    }
+  }, [phase, players]);
+
+  // Execute mafia vote resolution when timer hits 0 or all votes are in
+  useEffect(() => {
+    if (phase === 'night_mafia_vote' && (mafiaVoteTimer === 0 || Object.keys(mafiaVotes).length === players.filter(p => p.role === 'Mafia' && p.isAlive).length)) {
+      resolveMafiaVoting();
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mafiaVoteTimer, mafiaVotes, phase]);
 
   const addLog = useCallback((text: string, type: 'system' | 'user' | 'ai' | 'danger' | 'detective' = 'system', sender: string = 'System') => {
     const time = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
@@ -194,27 +245,62 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
     if (m === 0 || m >= c) {
       checkGameOver(finalPlayers);
     } else {
-      setPhase('night_mafia');
+      setPhase('night_mafia_vote');
     }
+  };
+
+  const resolveMafiaVoting = () => {
+    // Count votes for each target
+    const votes: Record<string, number> = {};
+    const livingMafia = players.filter(p => p.role === 'Mafia' && p.isAlive);
+    
+    Object.values(mafiaVotes).forEach(targetId => {
+      if (targetId) {
+        votes[targetId] = (votes[targetId] || 0) + 1;
+      }
+    });
+
+    // Find the target with most votes
+    let maxVotes = 0;
+    let selectedTarget = '';
+    
+    Object.entries(votes).forEach(([id, count]) => {
+      if (count > maxVotes) {
+        maxVotes = count;
+        selectedTarget = id;
+      }
+    });
+
+    if (selectedTarget) {
+      setMafiaTarget(selectedTarget);
+      addLog(`Die Mafia hat sich entschieden.`, 'system');
+    }
+    
+    setTimeout(() => setPhase('night_detective'), 1000);
   };
 
   // Phase state machine
   useEffect(() => {
     const user = players.find(p => !p.isAI);
     
-    if (phase === 'night_mafia') {
+    if (phase === 'night_mafia_vote') {
+      // Mafia voting phase - all mafia members vote on who to kill
       if (!user || user.role !== 'Mafia' || !user.isAlive) {
-        // AI Mafia turn - vote first, then choose target
+        // AI mafia will vote via the useEffect hook above
+        return;
+      }
+    }
+    else if (phase === 'night_mafia') {
+      if (!user || user.role !== 'Mafia' || !user.isAlive) {
+        // Fallback for single mafia or when voting is skipped
         const livingMafia = players.filter(p => p.role === 'Mafia' && p.isAlive);
         if (livingMafia.length > 0) {
           const targets = players.filter(p => p.role !== 'Mafia' && p.isAlive);
           if (targets.length > 0) {
-            // Add a delay for mafia to "discuss/vote" before selecting target
-            // If multiple mafias, they need to agree on a target
             const t1 = setTimeout(() => {
               setMafiaTarget(targets[Math.floor(Math.random() * targets.length)].id);
-            }, 2000 + (livingMafia.length > 1 ? 1000 : 0));
-            const t2 = setTimeout(() => setPhase('night_detective'), 4000 + (livingMafia.length > 1 ? 1500 : 0));
+            }, 2000);
+            const t2 = setTimeout(() => setPhase('night_detective'), 4000);
             return () => { clearTimeout(t1); clearTimeout(t2); };
           }
         }
@@ -293,12 +379,12 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
 
     const detDead = updatedPlayers.find(p => p.role === 'Detective' && !p.isAlive);
     if (detDead && detectiveLog.length > 0) {
-      addLog(`🕵️‍♂️ Das Tagebuch des Detektivs wurde gefunden:`);
+      addLog(`🕵️‍♂️ Das Tagebuch des Detektivs wurde gefunden:`, 'detective');
       detectiveLog.forEach(l => {
-        addLog(`- ${l.target} war ${l.isMafia ? 'Mafia 🔴' : 'Bürger 🟢'}`);
+        addLog(`- ${l.target} war ${l.isMafia ? 'Mafia 🔴' : 'Bürger 🟢'}`, 'detective');
       });
       if (detTargetPlayer) {
-        addLog(`- Letzter Eintrag: ${detTargetPlayer.name} war ${detTargetPlayer.role === 'Mafia' ? 'Mafia 🔴' : 'Bürger 🟢'}`);
+        addLog(`- Letzter Eintrag: ${detTargetPlayer.name} war ${detTargetPlayer.role === 'Mafia' ? 'Mafia 🔴' : 'Bürger 🟢'}`, 'detective');
       }
     }
 
@@ -399,7 +485,13 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
     const user = players.find(p => !p.isAI);
     if (!user || !user.isAlive) return;
 
-    if (phase === 'night_mafia' && user.role === 'Mafia') {
+    if (phase === 'night_mafia_vote' && user.role === 'Mafia') {
+      // User mafia member votes for a target
+      const p = players.find(p => p.id === id);
+      if (p && p.role !== 'Mafia' && p.isAlive) {
+        setMafiaVotes(prev => ({ ...prev, [user.id]: id }));
+      }
+    } else if (phase === 'night_mafia' && user.role === 'Mafia') {
       const p = players.find(p => p.id === id);
       if (p && p.role !== 'Mafia' && p.isAlive) {
         setMafiaTarget(id);
@@ -424,6 +516,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         <h2 className="text-lg font-black text-red-700 tracking-wider">🕵️‍♂️ MAFIA</h2>
         {phase !== 'setup' && (
           <span className="ml-auto text-[10px] px-2 py-0.5 rounded-full bg-red-900/30 text-red-400 border border-red-800/50 truncate max-w-[120px]">
+            {phase === 'night_mafia_vote' && 'Nacht: Mafia Abstimmung'}
             {phase === 'night_mafia' && 'Nacht: Mafia'}
             {phase === 'night_detective' && 'Nacht: Detektiv'}
             {phase === 'day_reveal' && 'Tag: Enthüllung'}
@@ -445,6 +538,23 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
                 <Play size={14} /> Starten
               </button>
             </div>
+          </div>
+        )}
+
+        {phase === 'night_mafia_vote' && user?.role === 'Mafia' && user.isAlive && (
+          <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-3 text-center">
+            <h3 className="text-xs font-bold text-red-500 flex items-center justify-center gap-1.5">
+              <Skull size={14} /> Mafia Abstimmung: {mafiaVoteTimer}s - Wähle dein Ziel!
+            </h3>
+            <p className="text-[10px] text-red-400 mt-1">Deine Stimme: {mafiaVotes[user.id] ? players.find(p => p.id === mafiaVotes[user.id])?.name : 'Noch keine'}</p>
+          </div>
+        )}
+
+        {phase === 'night_mafia_vote' && (!user || user.role !== 'Mafia' || !user.isAlive) && (
+          <div className="bg-red-950/20 border border-red-900/30 rounded-xl p-3 text-center">
+            <h3 className="text-xs font-bold text-red-500 flex items-center justify-center gap-1.5">
+              <Skull size={14} /> Mafia stimmt ab: {mafiaVoteTimer}s
+            </h3>
           </div>
         )}
 
@@ -504,11 +614,15 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
             const isSelf = !player.isAI;
             const isRevealed = !player.isAlive || phase === 'setup' || phase === 'game_over' || (player.role === 'Mafia' && user?.role === 'Mafia') || isSelf;
             const isSelectable = player.isAlive && !isSelf && (
+              (phase === 'night_mafia_vote' && user?.role === 'Mafia' && player.role !== 'Mafia') ||
               (phase === 'night_mafia' && user?.role === 'Mafia' && player.role !== 'Mafia') ||
               (phase === 'night_detective' && user?.role === 'Detective')
             );
-            const isTarget = (phase === 'night_mafia' && mafiaTarget === player.id) || (phase === 'night_detective' && detectiveTarget === player.id);
+            const isTarget = (phase === 'night_mafia_vote' && mafiaVotes[user?.id || ''] === player.id) || 
+                            (phase === 'night_mafia' && mafiaTarget === player.id) || 
+                            (phase === 'night_detective' && detectiveTarget === player.id);
             const voteCount = getVotesForPlayer(player.id);
+            const mafiaVoteCount = phase === 'night_mafia_vote' ? Object.values(mafiaVotes).filter(id => id === player.id).length : 0;
 
             return (
               <button
@@ -521,7 +635,14 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
                   ${isTarget ? 'ring-2 ring-red-500' : ''}
                 `}
               >
-                {/* Vote Bubble (Day Voting) */}
+                {/* Mafia Vote Bubble (Night Voting) */}
+                {phase === 'night_mafia_vote' && player.isAlive && player.role !== 'Mafia' && mafiaVoteCount > 0 && (
+                  <div className="absolute -top-1 -right-1 bg-red-800 border border-red-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white shadow animate-pulse">
+                    {mafiaVoteCount}
+                  </div>
+                )}
+
+                {/* Day Vote Bubble (Day Voting) */}
                 {phase === 'day_voting' && player.isAlive && voteCount > 0 && (
                   <div className="absolute -top-1 -right-1 bg-red-800 border border-red-600 rounded-full w-5 h-5 flex items-center justify-center text-[10px] font-bold text-white shadow animate-pulse">
                     {voteCount}

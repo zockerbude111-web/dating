@@ -152,10 +152,16 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const s = stateRef.current;
     if (!s.aiming) return;
     s.aiming = false;
-    const endPos = getCanvasPos(e);
-    s.aimEnd = endPos;
+    // Only get end position if the event is a proper mouseup/touchend (not mouseleave)
+    const isMouseLeave = e.type === 'mouseleave';
+    if (!isMouseLeave) {
+      const endPos = getCanvasPos(e);
+      s.aimEnd = endPos;
+    }
     const cue = s.balls[0];
     if (cue.pocketed || s.moving || isMoving()) return;
+    // Don't shoot if mouse left the canvas without releasing properly
+    if (isMouseLeave) return;
     const dx = s.aimStart.x - s.aimEnd.x;
     const dy = s.aimStart.y - s.aimEnd.y;
     const dist = Math.sqrt(dx * dx + dy * dy);

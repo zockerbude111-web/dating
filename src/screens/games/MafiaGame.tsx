@@ -40,10 +40,12 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   const [currentVotes, setCurrentVotes] = useState<Record<string, string>>({});
   const [voteTimer, setVoteTimer] = useState<number>(30);
   const [discussTimer, setDiscussTimer] = useState<number>(30);
+  const [hasShownDefeat, setHasShownDefeat] = useState(false);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const mafiaTargetRef = useRef(mafiaTarget);
   const detectiveTargetRef = useRef(detectiveTarget);
+  const userRoleRef = useRef<Role | null>(null);
 
   useEffect(() => { mafiaTargetRef.current = mafiaTarget; }, [mafiaTarget]);
   useEffect(() => { detectiveTargetRef.current = detectiveTarget; }, [detectiveTarget]);
@@ -70,7 +72,11 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
           const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive && t.id !== p.id);
           if (potentialTargets.length > 0) {
             const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
-            setMafiaVotes(prev => ({ ...prev, [p.id]: targetId }));
+            setMafiaVotes(prev => {
+              // Prevent duplicate votes from same AI
+              if (prev[p.id]) return prev;
+              return { ...prev, [p.id]: targetId };
+            });
           }
         }, delay);
         timeouts.push(t);
@@ -278,11 +284,33 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   const startGame = () => {
     if (players.length < 4) return;
 
+    // Calculate role distribution based on player count
+    const numPlayers = players.length;
+    let numMafia = 2;
+    let numDetective = 1;
+    
+    // Adjust mafia count based on total players for better balance
+    if (numPlayers <= 5) {
+      numMafia = 2;
+      numDetective = 1;
+    } else if (numPlayers === 6 || numPlayers === 7) {
+      numMafia = 2;
+      numDetective = 1;
+    } else if (numPlayers >= 8) {
+      numMafia = 3;
+      numDetective = 1;
+    }
+    
     const shuffled = [...players].sort(() => Math.random() - 0.5);
-    shuffled[0].role = 'Mafia';
-    shuffled[1].role = 'Mafia';
-    shuffled[2].role = 'Detective';
-    for (let i = 3; i < shuffled.length; i++) shuffled[i].role = 'Civilian';
+    
+    // Assign roles
+    for (let i = 0; i < numMafia; i++) {
+      shuffled[i].role = 'Mafia';
+    }
+    shuffled[numMafia].role = 'Detective';
+    for (let i = numMafia + 1; i < shuffled.length; i++) {
+      shuffled[i].role = 'Civilian';
+    }
 
     const finalPlayers = players.map(p => {
       const match = shuffled.find(s => s.id === p.id);
@@ -291,6 +319,13 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
 
     setPlayers(finalPlayers);
     addLog('Das Spiel beginnt! Die Nacht bricht herein.');
+    
+    // Store user's role in ref for later use
+    const userPlayer = finalPlayers.find(p => !p.isAI);
+    if (userPlayer) {
+      userRoleRef.current = userPlayer.role;
+    }
+    setHasShownDefeat(false);
     
     // Check win instantly (edge case)
     const m = finalPlayers.filter(p => p.role === 'Mafia' && p.isAlive).length;
@@ -420,6 +455,13 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
 
     setPlayers(updatedPlayers);
     const deadPlayer = players.find(p => p.id === killedId);
+
+    // Show defeat notification if user died and hasn't seen it yet
+    const user = players.find(p => !p.isAI);
+    if (user && !user.isAlive && !hasShownDefeat) {
+      addLog('Niederlage! Du wurdest eliminiert.', 'danger');
+      setHasShownDefeat(true);
+    }
 
     addLog('Die Nacht ist vorbei.');
     if (deadPlayer) {
@@ -558,6 +600,27 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       }
     }
   };
+
+  // Prevent dead users from voting during day_voting and mafia voting phases
+  useEffect(() => {
+    const user = players.find(p => !p.isAI);
+    if (!user) return;
+    
+    // If user is dead and in a voting phase, ensure they can't vote
+    if (!user.isAlive && (phase === 'day_voting' || phase === 'night_mafia_vote')) {
+      // Clear any existing votes from this user
+      setCurrentVotes(prev => {
+        const newVotes = { ...prev };
+        delete newVotes[user.id];
+        return newVotes;
+      });
+      setMafiaVotes(prev => {
+        const newVotes = { ...prev };
+        delete newVotes[user.id];
+        return newVotes;
+      });
+    }
+  }, [phase, players]);
 
   const user = players.find(p => !p.isAI);
 

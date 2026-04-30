@@ -2,11 +2,11 @@ import { useRef, useEffect, useCallback, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 
 // Vertical table dimensions
-const W = 300;
-const H = 540;
-const CUSHION = 20;
-const POCKET_R = 14;
-const BALL_R = 9;
+const W = 400;
+const H = 700;
+const CUSHION = 25;
+const POCKET_R = 18;
+const BALL_R = 11;
 const FRICTION = 0.985;
 const MIN_SPEED = 0.15;
 
@@ -152,16 +152,10 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const s = stateRef.current;
     if (!s.aiming) return;
     s.aiming = false;
-    // Only get end position if the event is a proper mouseup/touchend (not mouseleave)
-    const isMouseLeave = e.type === 'mouseleave';
-    if (!isMouseLeave) {
-      const endPos = getCanvasPos(e);
-      s.aimEnd = endPos;
-    }
+    const endPos = getCanvasPos(e);
+    s.aimEnd = endPos;
     const cue = s.balls[0];
     if (cue.pocketed || s.moving || isMoving()) return;
-    // Don't shoot if mouse left the canvas without releasing properly
-    if (isMouseLeave) return;
     const dx = s.aimStart.x - s.aimEnd.x;
     const dy = s.aimStart.y - s.aimEnd.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -475,8 +469,8 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
           ref={canvasRef}
           width={W}
           height={H}
-          className="w-full max-w-[220px] rounded-xl shadow-2xl cursor-crosshair"
-          style={{ touchAction: 'none', maxHeight: '44vh' }}
+          className="w-full max-w-[300px] rounded-xl shadow-2xl cursor-crosshair"
+          style={{ touchAction: 'none', maxHeight: '55vh' }}
           onMouseDown={handleDown}
           onMouseMove={handleMove}
           onMouseUp={handleUp}

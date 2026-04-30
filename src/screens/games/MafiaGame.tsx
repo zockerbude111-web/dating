@@ -38,8 +38,8 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   const [winner, setWinner] = useState<string | null>(null);
 
   const [currentVotes, setCurrentVotes] = useState<Record<string, string>>({});
-  const [voteTimer, setVoteTimer] = useState<number>(60);
-  const [discussTimer, setDiscussTimer] = useState<number>(60);
+  const [voteTimer, setVoteTimer] = useState<number>(30);
+  const [discussTimer, setDiscussTimer] = useState<number>(30);
 
   const chatRef = useRef<HTMLDivElement>(null);
   const mafiaTargetRef = useRef(mafiaTarget);
@@ -65,7 +65,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         // Skip AI voting for the user (human player) - they will vote manually
         if (!p.isAI) return;
         
-        const delay = 3000 + (index * 2000) + Math.random() * 2000;
+        const delay = 6000 + (index * 2000) + Math.random() * 4000;
         const t = window.setTimeout(() => {
           const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive);
           if (potentialTargets.length > 0) {
@@ -117,7 +117,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   // Handle voting countdown timer
   useEffect(() => {
     if (phase === 'day_voting') {
-      setVoteTimer(60);
+      setVoteTimer(30);
       setCurrentVotes({});
 
       // Set up AI players to vote at different intervals (6-12 seconds)
@@ -188,10 +188,10 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [voteTimer, phase]);
 
-  // Discussion timer: 60s then auto-move to voting
+  // Discussion timer: 30s then auto-move to voting
   useEffect(() => {
     if (phase === 'day_reveal') {
-      setDiscussTimer(60);
+      setDiscussTimer(30);
       const timer = setInterval(() => {
         setDiscussTimer(prev => {
           if (prev <= 1) {

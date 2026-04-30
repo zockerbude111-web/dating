@@ -155,7 +155,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const endPos = getCanvasPos(e);
     s.aimEnd = endPos;
     const cue = s.balls[0];
-    if (cue.pocketed) return;
+    if (cue.pocketed || s.moving || isMoving()) return;
     const dx = s.aimStart.x - s.aimEnd.x;
     const dy = s.aimStart.y - s.aimEnd.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
@@ -166,7 +166,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
     s.moving = true;
-  }, [getCanvasPos]);
+  }, [getCanvasPos, isMoving]);
 
   const sendChat = useCallback(() => {
     if (!chatInput.trim()) return;

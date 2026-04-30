@@ -243,11 +243,13 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       { id: 'p1', name: 'Al Capone', role: 'Civilian', isAlive: true, isAI: true },
       { id: 'p2', name: 'Tony Soprano', role: 'Civilian', isAlive: true, isAI: true },
       { id: 'p3', name: 'Lucky Luciano', role: 'Civilian', isAlive: true, isAI: true },
+      { id: 'p4', name: 'Pablo Escobar', role: 'Civilian', isAlive: true, isAI: true },
+      { id: 'p5', name: 'John Gotti', role: 'Civilian', isAlive: true, isAI: true },
     ];
     setPlayers(initialPlayers);
     setPhase('setup');
     setChatMsgs([]);
-    addLog('Spieler einrichten. Min. 4, Max. 8 Spieler.');
+    addLog('Spieler einrichten. Min. 6, Max. 12 Spieler.');
     setHasBegruessungskill(true);
     setIsBegruessungskillActive(false);
     setMafiaTarget('');
@@ -258,7 +260,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   };
 
   const addAIPlayer = () => {
-    if (players.length >= 8) return;
+    if (players.length >= 12) return;
     const usedNames = players.map(p => p.name);
     const availableNames = AI_NAMES.filter(n => !usedNames.includes(n));
     const name = availableNames.length > 0 ? availableNames[0] : `Spieler ${players.length + 1}`;
@@ -278,12 +280,12 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
   };
 
   const removePlayer = (id: string) => {
-    if (phase !== 'setup' || players.length <= 4) return;
+    if (phase !== 'setup' || players.length <= 6) return;
     setPlayers(players.filter(p => p.id !== id));
   };
 
   const startGame = () => {
-    if (players.length < 4) return;
+    if (players.length < 6) return;
 
     // Calculate role distribution based on player count
     const numPlayers = players.length;
@@ -291,13 +293,17 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
     let numDetective = 1;
     
     // Adjust mafia count based on total players for better balance
-    // 4-7 players: 1 Mafia, 1 Detective, rest Civilians
-    // 8 players: 2 Mafia, 1 Detective, rest Civilians
-    if (numPlayers <= 7) {
+    // 6-8 players: 1 Mafia, 1 Detective, rest Civilians
+    // 9-11 players: 2 Mafia, 1 Detective, rest Civilians
+    // 12 players: 3 Mafia, 1 Detective, rest Civilians
+    if (numPlayers <= 8) {
       numMafia = 1;
       numDetective = 1;
-    } else if (numPlayers >= 8) {
+    } else if (numPlayers <= 11) {
       numMafia = 2;
+      numDetective = 1;
+    } else {
+      numMafia = 3;
       numDetective = 1;
     }
     
@@ -645,12 +651,12 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
       <div className="flex-1 overflow-y-auto px-4 py-3 space-y-3 min-h-0">
         {phase === 'setup' && (
           <div className="bg-stone-900 border border-stone-800 rounded-xl p-3 flex flex-col gap-2">
-            <p className="text-xs text-stone-400">Richte dein Spiel ein. (4-8 Spieler)</p>
+            <p className="text-xs text-stone-400">Richte dein Spiel ein. (6-12 Spieler)</p>
             <div className="flex gap-2">
-              <button onClick={addAIPlayer} disabled={players.length >= 8} className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 disabled:opacity-50 text-stone-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border border-stone-700">
+              <button onClick={addAIPlayer} disabled={players.length >= 12} className="flex-1 py-2 bg-stone-800 hover:bg-stone-700 disabled:opacity-50 text-stone-200 text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 border border-stone-700">
                 <UserPlus size={14} /> KI hinzufügen
               </button>
-              <button onClick={startGame} disabled={players.length < 4} className="flex-1 py-2 bg-red-800 hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 shadow-lg shadow-red-900/40">
+              <button onClick={startGame} disabled={players.length < 6} className="flex-1 py-2 bg-red-800 hover:bg-red-700 text-white text-xs font-bold rounded-lg flex items-center justify-center gap-1.5 shadow-lg shadow-red-900/40">
                 <Play size={14} /> Starten
               </button>
             </div>

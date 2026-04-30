@@ -138,6 +138,12 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     s.aiming = true;
     s.aimStart = { x: cue.x, y: cue.y };
     s.aimEnd = { x: pos.x, y: pos.y };
+    
+    // Add global event listeners to track mouse/touch outside canvas
+    window.addEventListener('mousemove', handleGlobalMove as any);
+    window.addEventListener('mouseup', handleGlobalUp as any);
+    window.addEventListener('touchmove', handleGlobalMove as any, { passive: false });
+    window.addEventListener('touchend', handleGlobalUp as any);
   }, [getCanvasPos, isMoving]);
 
   const handleMove = useCallback((e: React.MouseEvent | React.TouchEvent) => {
@@ -166,6 +172,95 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
     s.moving = true;
+    
+    // Remove global event listeners
+    window.removeEventListener('mousemove', handleGlobalMove as any);
+    window.removeEventListener('mouseup', handleGlobalUp as any);
+    window.removeEventListener('touchmove', handleGlobalMove as any);
+    window.removeEventListener('touchend', handleGlobalUp as any);
+  }, [getCanvasPos, isMoving]);
+
+  // Global handlers for mouse/touch outside canvas
+  const handleGlobalMove = useCallback((e: MouseEvent | TouchEvent) => {
+    e.preventDefault();
+    const s = stateRef.current;
+    if (!s.aiming) return;
+    
+    // Get coordinates from global event
+    let clientX: number, clientY: number;
+    if ('touches' in e) {
+      clientX = (e as TouchEvent).touches[0]?.clientX ?? (e as TouchEvent).changedTouches[0]?.clientX ?? 0;
+      clientY = (e as TouchEvent).touches[0]?.clientY ?? (e as TouchEvent).changedTouches[0]?.clientY ?? 0;
+    } else {
+      clientX = (e as MouseEvent).clientX;
+      clientY = (e as MouseEvent).clientY;
+    }
+    
+    // Calculate position relative to canvas even if outside bounds
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    s.aimEnd = { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+  }, []);
+
+  const handleGlobalUp = useCallback((e: MouseEvent | TouchEvent) => {
+    e.preventDefault();
+    const s = stateRef.current;
+    if (!s.aiming) return;
+    s.aiming = false;
+    
+    // Get coordinates from global event
+    let clientX: number, clientY: number;
+    if ('touches' in e) {
+      clientX = (e as TouchEvent).changedTouches[0]?.clientX ?? 0;
+      clientY = (e as TouchEvent).changedTouches[0]?.clientY ?? 0;
+    } else {
+      clientX = (e as MouseEvent).clientX;
+      clientY = (e as MouseEvent).clientY;
+    }
+    
+    // Calculate position relative to canvas even if outside bounds
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const scaleX = W / rect.width;
+    const scaleY = H / rect.height;
+    s.aimEnd = { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
+    
+    const cue = s.balls[0];
+    if (cue.pocketed || s.moving || isMoving()) {
+      // Remove global event listeners
+      window.removeEventListener('mousemove', handleGlobalMove as any);
+      window.removeEventListener('mouseup', handleGlobalUp as any);
+      window.removeEventListener('touchmove', handleGlobalMove as any);
+      window.removeEventListener('touchend', handleGlobalUp as any);
+      return;
+    }
+    const dx = s.aimStart.x - s.aimEnd.x;
+    const dy = s.aimStart.y - s.aimEnd.y;
+    const dist = Math.sqrt(dx * dx + dy * dy);
+    // Only shoot if there was a meaningful drag distance (prevents accidental shots)
+    if (dist < 15) {
+      // Remove global event listeners
+      window.removeEventListener('mousemove', handleGlobalMove as any);
+      window.removeEventListener('mouseup', handleGlobalUp as any);
+      window.removeEventListener('touchmove', handleGlobalMove as any);
+      window.removeEventListener('touchend', handleGlobalUp as any);
+      return;
+    }
+    const power = Math.min(dist / 15, 12);
+    const angle = Math.atan2(dy, dx);
+    cue.vx = Math.cos(angle) * power;
+    cue.vy = Math.sin(angle) * power;
+    s.moving = true;
+    
+    // Remove global event listeners
+    window.removeEventListener('mousemove', handleGlobalMove as any);
+    window.removeEventListener('mouseup', handleGlobalUp as any);
+    window.removeEventListener('touchmove', handleGlobalMove as any);
+    window.removeEventListener('touchend', handleGlobalUp as any);
   }, [getCanvasPos, isMoving]);
 
   const sendChat = useCallback(() => {

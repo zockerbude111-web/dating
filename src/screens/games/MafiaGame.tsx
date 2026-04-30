@@ -67,7 +67,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
         
         const delay = 6000 + (index * 2000) + Math.random() * 4000;
         const t = window.setTimeout(() => {
-          const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive);
+          const potentialTargets = players.filter(t => t.role !== 'Mafia' && t.isAlive && t.id !== p.id);
           if (potentialTargets.length > 0) {
             const targetId = potentialTargets[Math.floor(Math.random() * potentialTargets.length)].id;
             setMafiaVotes(prev => ({ ...prev, [p.id]: targetId }));
@@ -149,7 +149,7 @@ export default function MafiaGame({ onBack }: { onBack: () => void }) {
             // 80% chance to vote for revealed mafia
             voteId = revealedMafiaIds[Math.floor(Math.random() * revealedMafiaIds.length)];
           } else {
-            // Normal random voting among alive players
+            // Normal random voting among alive players (not themselves)
             const potentialVotes = players.filter(v => v.isAlive && v.id !== p.id);
             if (potentialVotes.length > 0) {
               voteId = potentialVotes[Math.floor(Math.random() * potentialVotes.length)].id;

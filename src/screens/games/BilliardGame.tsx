@@ -159,7 +159,8 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const dx = s.aimStart.x - s.aimEnd.x;
     const dy = s.aimStart.y - s.aimEnd.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
-    if (dist < 5) return;
+    // Only shoot if there was a meaningful drag distance (prevents accidental shots)
+    if (dist < 15) return;
     const power = Math.min(dist / 15, 12);
     const angle = Math.atan2(dy, dx);
     cue.vx = Math.cos(angle) * power;

@@ -8,8 +8,9 @@ const TABLE_HEIGHT_RATIO = 1.6; // Table height as ratio of width (close to 2:1)
 const CUSHION_RATIO = 0.05; // Cushion as ratio of table width
 const POCKET_RADIUS_RATIO = 0.04; // Pocket radius as ratio of table width
 const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
-const FRICTION = 0.985;
-const MIN_SPEED_RATIO = 0.015; // Min speed as ratio of table width
+const FRICTION = 0.992; // Reduced friction for smoother movement
+const MIN_SPEED_RATIO = 0.008; // Min speed as ratio of table width (lower threshold)
+const POWER_MULTIPLIER = 0.8; // Power multiplier for shot strength
 
 interface Ball {
   id: number;
@@ -263,7 +264,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const dist = Math.sqrt(dx * dx + dy * dy);
     // Only shoot if there was a meaningful drag distance (prevents accidental shots)
     if (dist < 15) return;
-    const power = Math.min(dist / 15, 12);
+    const power = Math.min(dist / 10, 18) * POWER_MULTIPLIER;
     const angle = Math.atan2(dy, dx);
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
@@ -346,7 +347,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       window.removeEventListener('touchend', handleGlobalUp as any);
       return;
     }
-    const power = Math.min(dist / 15, 12);
+    const power = Math.min(dist / 10, 18) * POWER_MULTIPLIER;
     const angle = Math.atan2(dy, dx);
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
@@ -365,12 +366,15 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const time = now.toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
     setChatMsgs(prev => [...prev, { id: `m-${Date.now()}`, name: 'Du', text: chatInput.trim(), time, isMe: true }]);
     setChatInput('');
-    chatAutoReplyRef.current = window.setTimeout(() => {
-      const player = ONLINE_PLAYERS[Math.floor(Math.random() * ONLINE_PLAYERS.length)];
-      const response = CHAT_RESPONSES[Math.floor(Math.random() * CHAT_RESPONSES.length)];
-      const replyTime = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
-      setChatMsgs(prev => [...prev, { id: `r-${Date.now()}`, name: player.name, text: response, time: replyTime, isMe: false }]);
-    }, 1500 + Math.random() * 3000);
+    // Only send auto-reply if there are other players in the game (simulated)
+    if (ONLINE_PLAYERS.length > 0) {
+      chatAutoReplyRef.current = window.setTimeout(() => {
+        const player = ONLINE_PLAYERS[Math.floor(Math.random() * ONLINE_PLAYERS.length)];
+        const response = CHAT_RESPONSES[Math.floor(Math.random() * CHAT_RESPONSES.length)];
+        const replyTime = new Date().toLocaleTimeString('de-DE', { hour: '2-digit', minute: '2-digit' });
+        setChatMsgs(prev => [...prev, { id: `r-${Date.now()}`, name: player.name, text: response, time: replyTime, isMe: false }]);
+      }, 1500 + Math.random() * 3000);
+    }
   }, [chatInput]);
 
   const update = useCallback(() => {

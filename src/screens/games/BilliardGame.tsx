@@ -11,11 +11,14 @@ const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
 
 // Realistic ball physics parameters based on actual billiard physics
 // Rolling friction coefficient for pool balls on felt (typical range: 0.01-0.03)
-const ROLLING_FRICTION = 0.015;
+// Lower value = balls roll longer before stopping
+const ROLLING_FRICTION = 0.008;
 // Air resistance / drag coefficient (small but present)
-const AIR_DRAG = 0.0008;
+// Scaled to be more noticeable at high speeds, negligible at low speeds
+const AIR_DRAG = 0.0003;
 // Minimum velocity threshold - extremely low for natural-looking stops
-const MIN_SPEED_RATIO = 0.0008;
+// Allows balls to roll very slowly before finally stopping
+const MIN_SPEED_RATIO = 0.0005;
 // Power multiplier for shot strength
 const POWER_MULTIPLIER = 0.75;
 

@@ -8,9 +8,16 @@ const TABLE_HEIGHT_RATIO = 1.6; // Table height as ratio of width (close to 2:1)
 const CUSHION_RATIO = 0.05; // Cushion as ratio of table width
 const POCKET_RADIUS_RATIO = 0.04; // Pocket radius as ratio of table width
 const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
-const FRICTION = 0.993; // Friction coefficient for realistic gradual deceleration
-const MIN_SPEED_RATIO = 0.003; // Min speed as ratio of table width (very low threshold for smooth stopping)
-const POWER_MULTIPLIER = 0.75; // Power multiplier for shot strength
+
+// Realistic ball physics parameters based on actual billiard physics
+// Rolling friction coefficient for pool balls on felt (typical range: 0.01-0.03)
+const ROLLING_FRICTION = 0.015;
+// Air resistance / drag coefficient (small but present)
+const AIR_DRAG = 0.0008;
+// Minimum velocity threshold - extremely low for natural-looking stops
+const MIN_SPEED_RATIO = 0.0008;
+// Power multiplier for shot strength
+const POWER_MULTIPLIER = 0.75;
 
 interface Ball {
   id: number;
@@ -398,17 +405,41 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const balls = s.balls;
     for (const b of balls) {
       if (b.pocketed) continue;
-      // Apply friction first for realistic deceleration
-      b.vx *= FRICTION;
-      b.vy *= FRICTION;
-      // Move ball
-      b.x += b.vx;
-      b.y += b.vy;
-      // Only stop when velocity is truly negligible (smooth deceleration)
-      if (Math.abs(b.vx) < MIN_SPEED && Math.abs(b.vy) < MIN_SPEED) {
+      
+      // Apply realistic deceleration using physics-based model
+      // Rolling friction: constant deceleration proportional to normal force
+      // Air drag: velocity-squared resistance (simplified as linear for low speeds)
+      const speed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+      
+      if (speed > 0) {
+        // Calculate total deceleration magnitude
+        // Rolling friction provides constant deceleration
+        let decelMagnitude = ROLLING_FRICTION;
+        
+        // Add air drag component (more significant at higher speeds)
+        decelMagnitude += AIR_DRAG * speed;
+        
+        // Apply deceleration in the opposite direction of velocity
+        const decelX = (b.vx / speed) * decelMagnitude;
+        const decelY = (b.vy / speed) * decelMagnitude;
+        
+        b.vx -= decelX;
+        b.vy -= decelY;
+        
+        // Ensure we don't reverse direction (overshoot zero)
+        const newSpeed = Math.sqrt(b.vx * b.vx + b.vy * b.vy);
+        if (newSpeed < MIN_SPEED || (b.vx * (b.vx - decelX) < 0) || (b.vy * (b.vy - decelY) < 0)) {
+          b.vx = 0;
+          b.vy = 0;
+        }
+      } else {
         b.vx = 0;
         b.vy = 0;
       }
+      
+      // Move ball
+      b.x += b.vx;
+      b.y += b.vy;
       // Cushion collisions
       if (b.x - BALL_R < CUSHION) { b.x = CUSHION + BALL_R; b.vx = Math.abs(b.vx) * 0.85; }
       if (b.x + BALL_R > W - CUSHION) { b.x = W - CUSHION - BALL_R; b.vx = -Math.abs(b.vx) * 0.85; }

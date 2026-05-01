@@ -8,8 +8,8 @@ const TABLE_HEIGHT_RATIO = 1.6; // Table height as ratio of width (close to 2:1)
 const CUSHION_RATIO = 0.05; // Cushion as ratio of table width
 const POCKET_RADIUS_RATIO = 0.04; // Pocket radius as ratio of table width
 const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
-const FRICTION = 0.992; // Reduced friction for smoother movement
-const MIN_SPEED_RATIO = 0.008; // Min speed as ratio of table width (lower threshold)
+const FRICTION = 0.995; // Higher friction value for more gradual deceleration (closer to real physics)
+const MIN_SPEED_RATIO = 0.005; // Min speed as ratio of table width (lower threshold for smoother stopping)
 const POWER_MULTIPLIER = 0.8; // Power multiplier for shot strength
 
 interface Ball {
@@ -111,13 +111,8 @@ function createPockets(dimensions: TableDimensions) {
   ];
 }
 
-const ONLINE_PLAYERS = [
-  { name: 'Lukas', avatar: '#7c3aed' },
-  { name: 'Sophie', avatar: '#f43f5e' },
-  { name: 'Emma', avatar: '#14b8a6' },
-  { name: 'Felix', avatar: '#f59e0b' },
-  { name: 'Clara', avatar: '#ec4899' },
-];
+// Empty array - no fake players when playing alone
+const ONLINE_PLAYERS: { name: string; avatar: string }[] = [];
 
 const CHAT_RESPONSES = [
   'Schöner Stoß! 🎱', 'Wow, direkt versenkt!', 'Knapp daneben 😅',
@@ -148,7 +143,6 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
   const [, forceRender] = useState(0);
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([
     { id: '1', name: 'System', text: 'Willkommen am Tisch! 🎱', time: '12:00', isMe: false },
-    { id: '2', name: 'Lukas', text: 'Viel Glück!', time: '12:01', isMe: false },
   ]);
   const [chatInput, setChatInput] = useState('');
   const chatRef = useRef<HTMLDivElement>(null);

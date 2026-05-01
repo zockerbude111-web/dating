@@ -8,9 +8,9 @@ const TABLE_HEIGHT_RATIO = 1.6; // Table height as ratio of width (close to 2:1)
 const CUSHION_RATIO = 0.05; // Cushion as ratio of table width
 const POCKET_RADIUS_RATIO = 0.04; // Pocket radius as ratio of table width
 const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
-const FRICTION = 0.995; // Higher friction value for more gradual deceleration (closer to real physics)
-const MIN_SPEED_RATIO = 0.005; // Min speed as ratio of table width (lower threshold for smoother stopping)
-const POWER_MULTIPLIER = 0.8; // Power multiplier for shot strength
+const FRICTION = 0.993; // Friction coefficient for realistic gradual deceleration
+const MIN_SPEED_RATIO = 0.003; // Min speed as ratio of table width (very low threshold for smooth stopping)
+const POWER_MULTIPLIER = 0.75; // Power multiplier for shot strength
 
 interface Ball {
   id: number;
@@ -252,13 +252,27 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const endPos = getCanvasPos(e);
     s.aimEnd = endPos;
     const cue = s.balls[0];
-    if (cue.pocketed || s.moving || isMoving()) return;
+    if (cue.pocketed || s.moving || isMoving()) {
+      // Remove global event listeners
+      window.removeEventListener('mousemove', handleGlobalMove as any);
+      window.removeEventListener('mouseup', handleGlobalUp as any);
+      window.removeEventListener('touchmove', handleGlobalMove as any);
+      window.removeEventListener('touchend', handleGlobalUp as any);
+      return;
+    }
     const dx = s.aimStart.x - s.aimEnd.x;
     const dy = s.aimStart.y - s.aimEnd.y;
     const dist = Math.sqrt(dx * dx + dy * dy);
     // Only shoot if there was a meaningful drag distance (prevents accidental shots)
-    if (dist < 15) return;
-    const power = Math.min(dist / 10, 18) * POWER_MULTIPLIER;
+    if (dist < 15) {
+      // Remove global event listeners
+      window.removeEventListener('mousemove', handleGlobalMove as any);
+      window.removeEventListener('mouseup', handleGlobalUp as any);
+      window.removeEventListener('touchmove', handleGlobalMove as any);
+      window.removeEventListener('touchend', handleGlobalUp as any);
+      return;
+    }
+    const power = Math.min(dist / 12, 16) * POWER_MULTIPLIER;
     const angle = Math.atan2(dy, dx);
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
@@ -341,7 +355,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       window.removeEventListener('touchend', handleGlobalUp as any);
       return;
     }
-    const power = Math.min(dist / 10, 18) * POWER_MULTIPLIER;
+    const power = Math.min(dist / 12, 16) * POWER_MULTIPLIER;
     const angle = Math.atan2(dy, dx);
     cue.vx = Math.cos(angle) * power;
     cue.vy = Math.sin(angle) * power;
@@ -384,16 +398,23 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const balls = s.balls;
     for (const b of balls) {
       if (b.pocketed) continue;
-      b.x += b.vx;
-      b.y += b.vy;
+      // Apply friction first for realistic deceleration
       b.vx *= FRICTION;
       b.vy *= FRICTION;
-      if (Math.abs(b.vx) < MIN_SPEED * 0.5) b.vx = 0;
-      if (Math.abs(b.vy) < MIN_SPEED * 0.5) b.vy = 0;
+      // Move ball
+      b.x += b.vx;
+      b.y += b.vy;
+      // Only stop when velocity is truly negligible (smooth deceleration)
+      if (Math.abs(b.vx) < MIN_SPEED && Math.abs(b.vy) < MIN_SPEED) {
+        b.vx = 0;
+        b.vy = 0;
+      }
+      // Cushion collisions
       if (b.x - BALL_R < CUSHION) { b.x = CUSHION + BALL_R; b.vx = Math.abs(b.vx) * 0.85; }
       if (b.x + BALL_R > W - CUSHION) { b.x = W - CUSHION - BALL_R; b.vx = -Math.abs(b.vx) * 0.85; }
       if (b.y - BALL_R < CUSHION) { b.y = CUSHION + BALL_R; b.vy = Math.abs(b.vy) * 0.85; }
       if (b.y + BALL_R > H - CUSHION) { b.y = H - CUSHION - BALL_R; b.vy = -Math.abs(b.vy) * 0.85; }
+      // Pocket detection
       for (const p of pockets) {
         const pd = Math.sqrt((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
         if (pd < dimensions.POCKET_R) {

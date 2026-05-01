@@ -1,14 +1,15 @@
 import { useRef, useEffect, useCallback, useState } from 'react';
 import { ArrowLeft, Send } from 'lucide-react';
 
-// Vertical table dimensions
-const W = 400;
-const H = 700;
-const CUSHION = 25;
-const POCKET_R = 18;
-const BALL_R = 11;
+// Base proportions for 8-ball pool (realistic ratios)
+// Standard pool table ratio is 2:1 (length:width), we use slightly less for mobile fit
+const TABLE_WIDTH_RATIO = 0.9; // Table width as ratio of available space
+const TABLE_HEIGHT_RATIO = 1.6; // Table height as ratio of width (close to 2:1)
+const CUSHION_RATIO = 0.05; // Cushion as ratio of table width
+const POCKET_RADIUS_RATIO = 0.04; // Pocket radius as ratio of table width
+const BALL_RADIUS_RATIO = 0.025; // Ball radius as ratio of table width
 const FRICTION = 0.985;
-const MIN_SPEED = 0.15;
+const MIN_SPEED_RATIO = 0.015; // Min speed as ratio of table width
 
 interface Ball {
   id: number;
@@ -29,15 +30,85 @@ interface ChatMsg {
   isMe: boolean;
 }
 
-// 6 pockets: 4 corners + 2 side-center (left & right middle)
-const POCKETS = [
-  { x: CUSHION + 2, y: CUSHION + 2 },           // top-left
-  { x: W - CUSHION - 2, y: CUSHION + 2 },        // top-right
-  { x: CUSHION - 2, y: H / 2 },                  // middle-left
-  { x: W - CUSHION + 2, y: H / 2 },              // middle-right
-  { x: CUSHION + 2, y: H - CUSHION - 2 },        // bottom-left
-  { x: W - CUSHION - 2, y: H - CUSHION - 2 },    // bottom-right
-];
+interface TableDimensions {
+  W: number;
+  H: number;
+  CUSHION: number;
+  POCKET_R: number;
+  BALL_R: number;
+  MIN_SPEED: number;
+}
+
+function calculateTableDimensions(canvasWidth: number, canvasHeight: number): TableDimensions {
+  // Calculate table size based on available canvas space
+  const maxTableWidth = canvasWidth * TABLE_WIDTH_RATIO;
+  const maxTableHeight = canvasHeight * TABLE_HEIGHT_RATIO;
+  
+  // Maintain aspect ratio while fitting in available space
+  let W = maxTableWidth;
+  let H = W * TABLE_HEIGHT_RATIO;
+  
+  if (H > maxTableHeight) {
+    H = maxTableHeight;
+    W = H / TABLE_HEIGHT_RATIO;
+  }
+  
+  // Ensure minimum playable size
+  W = Math.max(W, 300);
+  H = Math.max(H, 500);
+  
+  const CUSHION = W * CUSHION_RATIO;
+  const POCKET_R = W * POCKET_RADIUS_RATIO;
+  const BALL_R = W * BALL_RADIUS_RATIO;
+  const MIN_SPEED = W * MIN_SPEED_RATIO;
+  
+  return { W, H, CUSHION, POCKET_R, BALL_R, MIN_SPEED };
+}
+
+function createBalls(dimensions: TableDimensions): Ball[] {
+  const { W, H, BALL_R } = dimensions;
+  const balls: Ball[] = [];
+  
+  // Cue ball position (behind head string)
+  balls.push({ id: 0, x: W / 2, y: H * 0.15, vx: 0, vy: 0, color: '#FFFFFF', stripe: false, pocketed: false });
+  
+  const colors = [
+    { c: '#E8D44D', s: false }, { c: '#1E3A8A', s: false }, { c: '#DC2626', s: false },
+    { c: '#7C3AED', s: false }, { c: '#F97316', s: false }, { c: '#15803D', s: false },
+    { c: '#7F1D1D', s: false }, { c: '#111111', s: false }, { c: '#E8D44D', s: true },
+    { c: '#1E3A8A', s: true }, { c: '#DC2626', s: true }, { c: '#7C3AED', s: true },
+    { c: '#F97316', s: true }, { c: '#15803D', s: true }, { c: '#7F1D1D', s: true },
+  ];
+  
+  // Rack position (foot spot area)
+  const startY = H * 0.42;
+  const startX = W / 2;
+  const spacing = BALL_R * 2 + 1;
+  let idx = 0;
+  
+  for (let row = 0; row < 5; row++) {
+    for (let col = 0; col <= row; col++) {
+      const x = startX + (col - row / 2) * spacing;
+      const y = startY + row * spacing * 0.866;
+      balls.push({ id: idx + 1, x, y, vx: 0, vy: 0, color: colors[idx].c, stripe: colors[idx].s, pocketed: false });
+      idx++;
+    }
+  }
+  return balls;
+}
+
+function createPockets(dimensions: TableDimensions) {
+  const { W, H, CUSHION, POCKET_R } = dimensions;
+  // 6 pockets: 4 corners + 2 side-center (left & right middle)
+  return [
+    { x: CUSHION + POCKET_R * 0.5, y: CUSHION + POCKET_R * 0.5 },           // top-left
+    { x: W - CUSHION - POCKET_R * 0.5, y: CUSHION + POCKET_R * 0.5 },        // top-right
+    { x: CUSHION - POCKET_R * 0.3, y: H / 2 },                               // middle-left
+    { x: W - CUSHION + POCKET_R * 0.3, y: H / 2 },                           // middle-right
+    { x: CUSHION + POCKET_R * 0.5, y: H - CUSHION - POCKET_R * 0.5 },        // bottom-left
+    { x: W - CUSHION - POCKET_R * 0.5, y: H - CUSHION - POCKET_R * 0.5 },    // bottom-right
+  ];
+}
 
 const ONLINE_PLAYERS = [
   { name: 'Lukas', avatar: '#7c3aed' },
@@ -53,35 +124,14 @@ const CHAT_RESPONSES = [
   'Nächster Versuch 💪', 'Stark!', 'Haha nice!', 'Weiter so! 🔥',
 ];
 
-function createBalls(): Ball[] {
-  const balls: Ball[] = [];
-  balls.push({ id: 0, x: W / 2, y: 100, vx: 0, vy: 0, color: '#FFFFFF', stripe: false, pocketed: false });
-  const colors = [
-    { c: '#E8D44D', s: false }, { c: '#1E3A8A', s: false }, { c: '#DC2626', s: false },
-    { c: '#7C3AED', s: false }, { c: '#F97316', s: false }, { c: '#15803D', s: false },
-    { c: '#7F1D1D', s: false }, { c: '#111111', s: false }, { c: '#E8D44D', s: true },
-    { c: '#1E3A8A', s: true }, { c: '#DC2626', s: true }, { c: '#7C3AED', s: true },
-    { c: '#F97316', s: true }, { c: '#15803D', s: true }, { c: '#7F1D1D', s: true },
-  ];
-  const startY = 280;
-  const startX = W / 2;
-  const spacing = BALL_R * 2 + 1;
-  let idx = 0;
-  for (let row = 0; row < 5; row++) {
-    for (let col = 0; col <= row; col++) {
-      const x = startX + (col - row / 2) * spacing;
-      const y = startY + row * spacing * 0.866;
-      balls.push({ id: idx + 1, x, y, vx: 0, vy: 0, color: colors[idx].c, stripe: colors[idx].s, pocketed: false });
-      idx++;
-    }
-  }
-  return balls;
-}
-
 export default function BilliardGame({ onBack }: { onBack: () => void }) {
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const [dimensions, setDimensions] = useState<TableDimensions>({ W: 400, H: 640, CUSHION: 20, POCKET_R: 16, BALL_R: 10, MIN_SPEED: 6 });
+  
   const stateRef = useRef({
-    balls: createBalls(),
+    balls: [] as Ball[],
+    pockets: [] as ReturnType<typeof createPockets>,
     aiming: false,
     aimStart: { x: 0, y: 0 },
     aimEnd: { x: 0, y: 0 },
@@ -92,6 +142,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     gameOver: false,
     gameLost: false,
   });
+  
   const animRef = useRef<number>(0);
   const [, forceRender] = useState(0);
   const [chatMsgs, setChatMsgs] = useState<ChatMsg[]>([
@@ -102,6 +153,51 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
   const chatRef = useRef<HTMLDivElement>(null);
   const chatAutoReplyRef = useRef<number>(0);
 
+  // Initialize or reset game with current dimensions
+  const initGame = useCallback((dims: TableDimensions) => {
+    stateRef.current.balls = createBalls(dims);
+    stateRef.current.pockets = createPockets(dims);
+    stateRef.current.aiming = false;
+    stateRef.current.moving = false;
+    stateRef.current.pocketed = [];
+    stateRef.current.message = '';
+    stateRef.current.messageTimer = 0;
+    stateRef.current.gameOver = false;
+    stateRef.current.gameLost = false;
+  }, []);
+
+  // Handle resize - calculate table dimensions based on container size
+  useEffect(() => {
+    const updateDimensions = () => {
+      if (!containerRef.current) return;
+      const rect = containerRef.current.getBoundingClientRect();
+      const newDims = calculateTableDimensions(rect.width, rect.height);
+      setDimensions(newDims);
+      // Re-initialize game when dimensions change significantly
+      if (Math.abs(newDims.W - dimensions.W) > 50 || Math.abs(newDims.H - dimensions.H) > 50) {
+        initGame(newDims);
+      }
+    };
+    
+    updateDimensions();
+    
+    const resizeObserver = new ResizeObserver(updateDimensions);
+    if (containerRef.current) {
+      resizeObserver.observe(containerRef.current);
+    }
+    
+    return () => {
+      resizeObserver.disconnect();
+    };
+  }, []);
+
+  // Initialize balls and pockets when dimensions are first set
+  useEffect(() => {
+    if (stateRef.current.balls.length === 0) {
+      initGame(dimensions);
+    }
+  }, [dimensions, initGame]);
+
   useEffect(() => {
     chatRef.current?.scrollTo({ top: chatRef.current.scrollHeight, behavior: 'smooth' });
   }, [chatMsgs]);
@@ -110,8 +206,8 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const canvas = canvasRef.current;
     if (!canvas) return { x: 0, y: 0 };
     const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const scaleY = H / rect.height;
+    const scaleX = dimensions.W / rect.width;
+    const scaleY = dimensions.H / rect.height;
     let clientX: number, clientY: number;
     if ('touches' in e) {
       clientX = e.touches[0]?.clientX ?? e.changedTouches[0]?.clientX ?? 0;
@@ -121,11 +217,11 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       clientY = e.clientY;
     }
     return { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-  }, []);
+  }, [dimensions]);
 
   const isMoving = useCallback((): boolean => {
-    return stateRef.current.balls.some(b => !b.pocketed && (Math.abs(b.vx) > MIN_SPEED || Math.abs(b.vy) > MIN_SPEED));
-  }, []);
+    return stateRef.current.balls.some(b => !b.pocketed && (Math.abs(b.vx) > dimensions.MIN_SPEED || Math.abs(b.vy) > dimensions.MIN_SPEED));
+  }, [dimensions]);
 
   const handleDown = useCallback((e: React.MouseEvent | React.TouchEvent) => {
     e.preventDefault();
@@ -200,10 +296,10 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const scaleY = H / rect.height;
+    const scaleX = dimensions.W / rect.width;
+    const scaleY = dimensions.H / rect.height;
     s.aimEnd = { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
-  }, []);
+  }, [dimensions]);
 
   const handleGlobalUp = useCallback((e: MouseEvent | TouchEvent) => {
     e.preventDefault();
@@ -225,8 +321,8 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const canvas = canvasRef.current;
     if (!canvas) return;
     const rect = canvas.getBoundingClientRect();
-    const scaleX = W / rect.width;
-    const scaleY = H / rect.height;
+    const scaleX = dimensions.W / rect.width;
+    const scaleY = dimensions.H / rect.height;
     s.aimEnd = { x: (clientX - rect.left) * scaleX, y: (clientY - rect.top) * scaleY };
     
     const cue = s.balls[0];
@@ -279,6 +375,9 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
 
   const update = useCallback(() => {
     const s = stateRef.current;
+    const { W, H, CUSHION, BALL_R, MIN_SPEED } = dimensions;
+    const pockets = s.pockets;
+    
     if (s.messageTimer > 0) {
       s.messageTimer--;
       if (s.messageTimer === 0) s.message = '';
@@ -297,16 +396,16 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       if (b.x + BALL_R > W - CUSHION) { b.x = W - CUSHION - BALL_R; b.vx = -Math.abs(b.vx) * 0.85; }
       if (b.y - BALL_R < CUSHION) { b.y = CUSHION + BALL_R; b.vy = Math.abs(b.vy) * 0.85; }
       if (b.y + BALL_R > H - CUSHION) { b.y = H - CUSHION - BALL_R; b.vy = -Math.abs(b.vy) * 0.85; }
-      for (const p of POCKETS) {
+      for (const p of pockets) {
         const pd = Math.sqrt((b.x - p.x) ** 2 + (b.y - p.y) ** 2);
-        if (pd < POCKET_R) {
+        if (pd < dimensions.POCKET_R) {
           b.pocketed = true;
           b.vx = 0;
           b.vy = 0;
           if (b.id === 0) {
             s.message = 'Foul! Weisse Kugel versenkt';
             s.messageTimer = 120;
-            setTimeout(() => { b.pocketed = false; b.x = W / 2; b.y = 100; }, 800);
+            setTimeout(() => { b.pocketed = false; b.x = W / 2; b.y = H * 0.15; }, 800);
           } else if (b.id === 8) {
             s.message = '🎱 8-Ball versenkt! Verloren!';
             s.messageTimer = 300;
@@ -363,7 +462,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
         forceRender(n => n + 1);
       }
     }
-  }, [isMoving]);
+  }, [dimensions, isMoving]);
 
   const draw = useCallback(() => {
     const canvas = canvasRef.current;
@@ -371,6 +470,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
     const s = stateRef.current;
+    const { W, H, CUSHION, BALL_R } = dimensions;
 
     ctx.fillStyle = '#5C3A1E';
     ctx.fillRect(0, 0, W, H);
@@ -397,17 +497,17 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     ctx.strokeStyle = 'rgba(255,255,255,0.12)';
     ctx.lineWidth = 1;
     ctx.setLineDash([4, 4]);
-    ctx.beginPath(); ctx.moveTo(CUSHION, 130); ctx.lineTo(W - CUSHION, 130); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(CUSHION, H * 0.2); ctx.lineTo(W - CUSHION, H * 0.2); ctx.stroke();
     ctx.setLineDash([]);
 
     // Foot spot
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
-    ctx.beginPath(); ctx.arc(W / 2, 280, 2, 0, Math.PI * 2); ctx.fill();
+    ctx.beginPath(); ctx.arc(W / 2, H * 0.42, 2, 0, Math.PI * 2); ctx.fill();
 
     // Pockets
-    for (const p of POCKETS) {
+    for (const p of s.pockets) {
       ctx.fillStyle = '#111';
-      ctx.beginPath(); ctx.arc(p.x, p.y, POCKET_R, 0, Math.PI * 2); ctx.fill();
+      ctx.beginPath(); ctx.arc(p.x, p.y, dimensions.POCKET_R, 0, Math.PI * 2); ctx.fill();
       ctx.strokeStyle = '#3A2A0A'; ctx.lineWidth = 2; ctx.stroke();
     }
 
@@ -451,12 +551,12 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
         ctx.lineWidth = 1;
         ctx.setLineDash([3, 5]);
         ctx.beginPath(); ctx.moveTo(cue.x, cue.y);
-        ctx.lineTo(cue.x + Math.cos(angle) * 200, cue.y + Math.sin(angle) * 200);
+        ctx.lineTo(cue.x + Math.cos(angle) * (W * 0.5), cue.y + Math.sin(angle) * (W * 0.5));
         ctx.stroke();
         ctx.setLineDash([]);
         const dist = Math.sqrt(dx * dx + dy * dy);
-        const power = Math.min(dist, 180);
-        const cueLen = 100;
+        const power = Math.min(dist, W * 0.45);
+        const cueLen = W * 0.25;
         const cueStartDist = BALL_R + 4 + power * 0.3;
         const sx = cue.x - Math.cos(angle) * cueStartDist;
         const sy = cue.y - Math.sin(angle) * cueStartDist;
@@ -469,7 +569,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
         ctx.fillStyle = '#6BC5E8';
         ctx.beginPath(); ctx.arc(sx, sy, 2.5, 0, Math.PI * 2); ctx.fill();
         // Power bar
-        const pct = Math.min(power / 180, 1);
+        const pct = Math.min(power / (W * 0.45), 1);
         ctx.fillStyle = 'rgba(0,0,0,0.5)';
         ctx.fillRect(W - 22, CUSHION + 5, 10, H - CUSHION * 2 - 10);
         const barH = (H - CUSHION * 2 - 10) * pct;
@@ -486,10 +586,12 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
     const pocketed = s.balls.filter(b => b.pocketed && b.id > 0 && b.id !== 8);
     if (pocketed.length > 0) {
       ctx.fillStyle = 'rgba(0,0,0,0.4)';
-      ctx.fillRect(5, H - 13, pocketed.length * 12 + 6, 11);
+      const ballSize = BALL_R * 0.4;
+      const spacing = BALL_R * 1.2;
+      ctx.fillRect(5, H - ballSize * 2 - 3, pocketed.length * spacing + 6, ballSize * 2 + 3);
       pocketed.forEach((b, i) => {
         ctx.fillStyle = b.color;
-        ctx.beginPath(); ctx.arc(11 + i * 12, H - 7.5, 4, 0, Math.PI * 2); ctx.fill();
+        ctx.beginPath(); ctx.arc(11 + i * spacing, H - ballSize - 1.5, ballSize, 0, Math.PI * 2); ctx.fill();
       });
     }
 
@@ -499,7 +601,7 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       const tw = ctx.measureText(s.message).width;
       ctx.fillRect(W / 2 - tw / 2 - 12, H / 2 - 14, tw + 24, 28);
       ctx.fillStyle = '#FFF';
-      ctx.font = 'bold 12px Inter, sans-serif';
+      ctx.font = `bold ${Math.max(12, W * 0.03)}px Inter, sans-serif`;
       ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
       ctx.fillText(s.message, W / 2, H / 2);
     }
@@ -509,17 +611,17 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       ctx.fillStyle = 'rgba(0,0,0,0.7)';
       ctx.fillRect(0, 0, W, H);
       ctx.fillStyle = s.gameLost ? '#EF4444' : '#22C55E';
-      ctx.font = 'bold 22px Inter, sans-serif';
+      ctx.font = `bold ${Math.max(22, W * 0.055)}px Inter, sans-serif`;
       ctx.textAlign = 'center';
       ctx.fillText(s.gameLost ? '😢 Verloren!' : '🏆 Gewonnen!', W / 2, H / 2 - 20);
       ctx.fillStyle = '#FFF';
-      ctx.font = '13px Inter, sans-serif';
+      ctx.font = `${Math.max(13, W * 0.032)}px Inter, sans-serif`;
       ctx.fillText(`${s.pocketed.length}/15 Kugeln versenkt`, W / 2, H / 2 + 5);
-      ctx.font = '11px Inter, sans-serif';
+      ctx.font = `${Math.max(11, W * 0.028)}px Inter, sans-serif`;
       ctx.fillStyle = 'rgba(255,255,255,0.6)';
       ctx.fillText('Tippe zum Neustarten', W / 2, H / 2 + 25);
     }
-  }, []);
+  }, [dimensions]);
 
   const loop = useCallback(() => {
     update();
@@ -559,19 +661,24 @@ export default function BilliardGame({ onBack }: { onBack: () => void }) {
       </div>
 
       {/* Game Canvas */}
-      <div className="flex-1 flex items-center justify-center px-3 py-2 min-h-0">
+      <div ref={containerRef} className="flex-1 flex items-center justify-center px-3 py-2 min-h-0">
         <canvas
           ref={canvasRef}
-          width={W}
-          height={H}
-          className="w-full max-w-[300px] rounded-xl shadow-2xl cursor-crosshair"
-          style={{ touchAction: 'none', maxHeight: '55vh' }}
+          width={dimensions.W}
+          height={dimensions.H}
+          className="w-full h-full rounded-xl shadow-2xl cursor-crosshair"
+          style={{ touchAction: 'none' }}
           onMouseDown={handleDown}
           onMouseMove={handleMove}
           onMouseUp={handleUp}
           onTouchStart={handleDown}
           onTouchMove={handleMove}
           onTouchEnd={handleUp}
+          onClick={() => {
+            if (s.gameOver) {
+              initGame(dimensions);
+            }
+          }}
         />
       </div>
 
